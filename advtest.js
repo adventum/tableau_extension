@@ -2,10 +2,6 @@ webix.DataStore.prototype.sorting.as.float = function (a, b) {
   return a > b ? 1 : -1;
 }
 
-webix.GroupMethods.total = function (prop, data) {
-  console.log('total', data, prop)
-  return 123
-};
 
 Array.prototype.getUnique = function () {
   var o = {}, a = [], i, e;
@@ -14,49 +10,123 @@ Array.prototype.getUnique = function () {
   return a;
 }
 
+function intersect(arr1, arr2) {
+  return arr1.filter(function (n) {
+    return arr2.indexOf(n) !== -1;
+  });
+}
+
+function columnsToList(columns) {
+  var list = []
+  for (var c of columns) {
+    list.push(c.fieldName)
+  }
+  return list
+}
+
 $(document).ready(function () {
   tableau.extensions.initializeAsync().then(async function () {
 
     var dashboard = tableau.extensions.dashboardContent.dashboard;
     var dashboardWorksheets = dashboard.worksheets
+    var allWsData = []
+    for (var ws of dashboardWorksheets) {
+      allWsData.push(await ws.getSummaryDataAsync())
+    }
+    console.log('allWsData', allWsData)
+    allWsData.sort((a, b) => {
+      if (a.columns.length < b.columns.length) return -1
+      else if (a.columns.length > b.columns.length) return 1
+      else return 0
+    })
+    console.log('allWsData 0', allWsData[0])
+    console.log('allWsData -1', allWsData[allWsData.length - 1])
 
-    var choosedWorksheet = dashboardWorksheets[0]
-    console.log('dashboardWorksheets', dashboardWorksheets)
-    console.log('getUnderlyingDataAsync', await choosedWorksheet.getDataSourcesAsync
-      ())
-    console.log('worksheetsToTreetable', await worksheetsToTreetable(dashboardWorksheets))
-
-    var wsSummaryData = await choosedWorksheet.getSummaryDataAsync()
-    console.log('wsSummaryData', wsSummaryData)
+    var wsSummaryData = allWsData[allWsData.length - 1]
+    var groupDeep = wsSummaryData.columns.length - allWsData[0].columns.length + 1
+    var valueCols = columnsToList(wsSummaryData.columns.slice(groupDeep))
+    var groupCols = columnsToList(wsSummaryData.columns.slice(0, groupDeep))
+    console.log('ws data slices', groupDeep, valueCols, groupCols)
 
     var transformedData = summaryDataToTreetableFormat(wsSummaryData.columns, wsSummaryData.data)
     console.log(transformedData)
     var mainTreeTable = makeTreeTable(transformedData)
-    mainTreeTable.group({
-      by: function (obj) { return obj.Category + "-" + obj.Sub_Category },
-      map: {
-        value: ["Sub_Category"],
-        Category: ['Category'],
-        Sub_Category: ["Sub_Category"],
-        SUM_Profit_: ["SUM_Profit_", "sum"]
+    var branchN = 0
+    console.log('----- cycle start')
+    for (var additionalWsData of allWsData.slice(0, allWsData.length - 1).reverse()) {
+      console.log('additionalWsData', additionalWsData)
+      var thisWsGroupColumns = intersect(columnsToList(additionalWsData.columns), groupCols)
+      console.log('thisWsGroupColumns', thisWsGroupColumns)
+      var groupLevelObj = {
+        'by': (obj) => {
+          var objGroupValues = []
+          for (var groupCol of thisWsGroupColumns) {
+            objGroupValues.push(obj[nameToId(groupCol)])
+          }
+          return objGroupValues.join('-')
+        }, 'map': {}
       }
-    })
+      groupLevelObj.map.value = [nameToId(thisWsGroupColumns[thisWsGroupColumns.length - 1])]
+      for (var groupField of thisWsGroupColumns) {
+        groupLevelObj.map[nameToId(groupField)] = [nameToId(groupField)]
+      }
+      for (var valueField of valueCols) {
+        groupLevelObj.map[nameToId(valueField)] = [nameToId(valueField), function (prop, data) {
+          var groupLookupRow = data[0]
+          console.log('groupLookupRow', groupLookupRow)
+          var thisGroupTotals = additionalWsData.data.filter(
+            (row) => {
+              var lookupRowValues = []
+              var columnId = 0
+              for (var groupField of thisWsGroupColumns) {
+                return 123
+              }
+            }
+          )
+          return 123
+        }]
+      }
+      var groupArgs = [groupLevelObj]
+      if (branchN > 0) {
+        groupArgs.push(0)
+      }
+      branchN++
+      console.log('groupArgs', groupArgs)
+      mainTreeTable.group(...groupArgs)
+      console.log('---------')
 
-    mainTreeTable.group({
-      by: "Category",
-      map: {
-        value: ["Category"],
-        // Sub_Category: ["Sub_Category"],
-        SUM_Profit_: ["SUM_Profit_", "sum"]
-      }
-    }, 0);
+    }
+    console.log('cycle end')
+
     // mainTreeTable.group({
-    //   by: 'Sub_Category',
-    //   row: 'Category'
+    //   by: function (obj) { return obj.YEAR_Order_Date_ + '-' + obj.Category + "-" + obj.Sub_Category },
+    //   map: {
+    //     value: ["Sub_Category"],
+    //     Category: ['Category'],
+    //     Sub_Category: ["Sub_Category"],
+    //     YEAR_Order_Date_: ['YEAR_Order_Date_'],
+    //   }
     // })
 
-    // var mainTreeTable = await worksheetsToTreetable(dashboardWorksheets)
+    // mainTreeTable.group({
+    //   by: function (obj) { return obj.YEAR_Order_Date_ + "-" + obj.Category },
+    //   map: {
+    //     value: ["Category"],
+    //     Category: ['Category'],
+    //     YEAR_Order_Date_: ["YEAR_Order_Date_"],
+    //   }
+    // }, 0)
+
+    // mainTreeTable.group({
+    //   by: 'YEAR_Order_Date_',
+    //   map: {
+    //     value: ["YEAR_Order_Date_"],
+    //     YEAR_Order_Date_: ["YEAR_Order_Date_"]
+    //   }
+    // }, 0)
+
     webix.ready(function () {
+      console.log('before ready')
       webix.ui({
         view: "scrollview",
         body: {
@@ -67,13 +137,14 @@ $(document).ready(function () {
           ]
         }
       });
+      console.log('after ready')
     });
-    choosedWorksheet.addEventListener(tableau.TableauEventType.FilterChanged, async (filterEvent) => {
-      console.log('FilterChanged', filterEvent)
-    })
-    choosedWorksheet.addEventListener(tableau.TableauEventType.MarkSelectionChanged, async (filterEvent) => {
-      console.log('MarkSelectionChanged', filterEvent)
-    })
+    // choosedWorksheet.addEventListener(tableau.TableauEventType.FilterChanged, async (filterEvent) => {
+    //   console.log('FilterChanged', filterEvent)
+    // })
+    // choosedWorksheet.addEventListener(tableau.TableauEventType.MarkSelectionChanged, async (filterEvent) => {
+    //   console.log('MarkSelectionChanged', filterEvent)
+    // })
     // choosedWorksheet.addEventListener(tableau.TableauEventType.ParameterChanged, async (filterEvent) => {
     //   console.log('ParameterChanged', filterEvent)
     // })
@@ -85,7 +156,7 @@ $(document).ready(function () {
 
 
 function nameToId(name) {
-  var charsToReplace = [' ', '(', ')', '%', '-', '[', ']']
+  var charsToReplace = [' ', '(', ')', '%', '-', '[', ']', '.', '?']
   var result = name
   for (var char of charsToReplace) {
     result = result.split(char).join('_')
@@ -93,112 +164,6 @@ function nameToId(name) {
   return result
 }
 
-async function worksheetsToTreetable(worksheets) {
-  var worksheetsSummaryData = []
-  var dataTree = { columns: [], data: [] }
-  for (var ws of worksheets) {
-    var wsSummaryData = await ws.getSummaryDataAsync()
-    worksheetsSummaryData.push(wsSummaryData)
-  }
-  worksheetsSummaryData.sort((a, b) => { a.columns.length - b.columns.length })
-  console.log('worksheetsSummaryData', worksheetsSummaryData)
-  var groupDeep = worksheetsSummaryData[0].columns.length - worksheetsSummaryData[worksheetsSummaryData.length - 1].columns.length + 1
-  var valueCols = worksheetsSummaryData[0].columns.slice(groupDeep)
-  var groupCols = worksheetsSummaryData[0].columns.slice(0, groupDeep)
-  console.log('groupDeep', groupDeep)
-  console.log('groupCols', groupCols)
-  console.log('valueCols', valueCols)
-
-  var col_n = 0
-  for (var col_field of worksheetsSummaryData[0].columns) {
-    var columnData = {
-      id: nameToId(col_field.fieldName),
-      header: { text: col_field.fieldName },
-      fillspace: true,
-      sort: col_field.dataType
-    }
-    if (col_n === 0) {
-      columnData.template = `{common.icon()} #${columnData.id}#`
-    } else {
-
-    }
-    col_n++
-    dataTree.columns.push(columnData)
-  }
-  console.log('dataTree', JSON.stringify(dataTree))
-
-  // 
-  // var currentDeep = 0
-  // for (var ws of worksheetsSummaryData.reverse()) {
-  //   var currentGroup = dataTree
-  //   if (currentDeep > 0) {
-  //     for (var i of [...Array(currentDeep).keys()]) {
-  //       currentGroup = currentGroup[currentDeep - 1]
-  //     }
-  //   }
-  //   for (var row of ws.data) {
-  //     var transformedRowData = {}
-  //     currentGroup.data.push(transformedRowData)
-  //   }
-  //   console.log('--------')
-  //   console.log('ws', ws)
-  //   console.log('currentGroup', currentGroup)
-  //   console.log('--------')
-  //   currentGroup.push({ hui: 1, data: {} })
-  //   currentDeep++
-  // }
-
-  function rowsInObjects(data, columns) {
-    var rowsToReturn = []
-    for (var row of data) {
-      var dict = {}
-      var curFieldNum = 0
-      for (var valueArray of row) {
-        dict[nameToId(columns[curFieldNum].fieldName)] = row[curFieldNum].formattedValue
-        curFieldNum++
-      }
-      rowsToReturn.push(dict)
-    }
-    return rowsToReturn
-  }
-
-  var currentWorksheetNum = 0
-  var lastData = [dataTree]
-  var dataBuffer = []
-  console.log('------')
-  for (var currentWorksheet of worksheetsSummaryData.reverse()) {
-    console.log('currentWorksheetNum', currentWorksheetNum)
-    console.log('lastData', lastData)
-    console.log('dataBuffer', dataBuffer)
-    console.log('currentWorksheet', currentWorksheet)
-    var thisWorksheetFlatObjs = rowsInObjects(currentWorksheet.data, currentWorksheet.columns)
-    if (currentWorksheetNum === 0) {
-      console.log('First ws, dont group!')
-      dataBuffer = thisWorksheetFlatObjs
-    } else {
-      console.log('Additional ws, group!')
-      var currentGroupField = nameToId(groupCols[currentWorksheetNum - 1].fieldName)
-      for (var lastHeaderObj of lastData) {
-        console.log('Extending ', lastHeaderObj)
-        console.log('thisWorksheetFlatObjs', thisWorksheetFlatObjs)
-        var thisGroupObjs = thisWorksheetFlatObjs.filter(obj => obj[currentGroupField] === lastHeaderObj[currentGroupField]) || []
-        console.log('Groupped ' + currentGroupField + '(by ' + lastHeaderObj[currentGroupField] + ')')
-        console.log('thisGroupObjs', JSON.stringify(thisGroupObjs))
-        lastHeaderObj.data = thisGroupObjs
-        dataBuffer = dataBuffer.concat(lastHeaderObj.data)
-      }
-
-    }
-    console.log('last ws data buffer', dataBuffer)
-    lastData = dataBuffer
-    dataBuffer = []
-    currentWorksheetNum++
-    console.log('-------')
-
-  }
-  console.log('-------')
-  console.log('dataTree', dataTree)
-}
 
 function summaryDataToTreetableFormat(summaryDataColumns, summaryDataData) {
   var transformedData = {}
@@ -242,25 +207,11 @@ function makeTreeTable(transformedData) {
     clipboard: "selection",
     select: "cell",
     multiselect: true,
-    // scheme: {
-    //   $group: {
-    //     by: transformedData.columns[0].id,
-    //     map: {}
-    //   }
-    // },
     scroll: 'xy',
     // scrollY: true,
     resizeColumn: { headerOnly: true },
     resizeRow: { headerOnly: true }
   }
-  // for (var col of transformedData.columns) {
-  //   console.log('col', col)
-  //   var totalFunctComp = ['SUM', 'AGG', 'CNT', 'CNTD']
-  //   uiParams.scheme.$group.map[col.id] = [
-  //     col.id,
-  //     'sum'
-  //   ]
-  // }
 
   return webix.ui(uiParams);
 }
