@@ -33,30 +33,22 @@ $(document).ready(function () {
     for (var ws of dashboardWorksheets) {
       allWsData.push(await ws.getSummaryDataAsync())
     }
-    console.log('allWsData', allWsData)
     allWsData.sort((a, b) => {
       if (a.columns.length < b.columns.length) return -1
       else if (a.columns.length > b.columns.length) return 1
       else return 0
     })
-    console.log('allWsData 0', allWsData[0])
-    console.log('allWsData -1', allWsData[allWsData.length - 1])
 
     var wsSummaryData = allWsData[allWsData.length - 1]
     var groupDeep = wsSummaryData.columns.length - allWsData[0].columns.length + 1
     var valueCols = columnsToList(wsSummaryData.columns.slice(groupDeep))
     var groupCols = columnsToList(wsSummaryData.columns.slice(0, groupDeep))
-    console.log('ws data slices', groupDeep, valueCols, groupCols)
 
     var transformedData = summaryDataToTreetableFormat(wsSummaryData.columns, wsSummaryData.data)
-    console.log(transformedData)
     var mainTreeTable = makeTreeTable(transformedData)
     var branchN = 0
-    console.log('----- cycle start')
     for (var additionalWsData of allWsData.slice(0, allWsData.length - 1).reverse()) {
-      console.log('additionalWsData', additionalWsData)
       var thisWsGroupColumns = intersect(columnsToList(additionalWsData.columns), groupCols)
-      console.log('thisWsGroupColumns', thisWsGroupColumns)
       var groupLevelObj = {
         'by': (obj) => {
           var objGroupValues = []
@@ -73,17 +65,29 @@ $(document).ready(function () {
       for (var valueField of valueCols) {
         groupLevelObj.map[nameToId(valueField)] = [nameToId(valueField), function (prop, data) {
           var groupLookupRow = data[0]
-          console.log('groupLookupRow', groupLookupRow)
+          var lookupRowValues = []
+          for (var groupField of thisWsGroupColumns) {
+            lookupRowValues.push(groupLookupRow[nameToId(groupField)])
+          }
+
           var thisGroupTotals = additionalWsData.data.filter(
             (row) => {
-              var lookupRowValues = []
-              var columnId = 0
-              for (var groupField of thisWsGroupColumns) {
-                return 123
+              for (var i = 0; i < lookupRowValues.length; i++) {
+                if (row[i].formattedValue !== lookupRowValues[i]) {
+                  return false
+                }
               }
+              return true
             }
-          )
-          return 123
+          )[0].slice(-valueCols.length)
+
+          var i = 0
+          var finalObj = {}
+          for (var valueCol of valueCols) {
+            finalObj[nameToId(valueCol)] = thisGroupTotals[i].formattedValue
+            i++
+          }
+          return prop(finalObj)
         }]
       }
       var groupArgs = [groupLevelObj]
@@ -91,42 +95,9 @@ $(document).ready(function () {
         groupArgs.push(0)
       }
       branchN++
-      console.log('groupArgs', groupArgs)
-      mainTreeTable.group(...groupArgs)
-      console.log('---------')
 
     }
-    console.log('cycle end')
-
-    // mainTreeTable.group({
-    //   by: function (obj) { return obj.YEAR_Order_Date_ + '-' + obj.Category + "-" + obj.Sub_Category },
-    //   map: {
-    //     value: ["Sub_Category"],
-    //     Category: ['Category'],
-    //     Sub_Category: ["Sub_Category"],
-    //     YEAR_Order_Date_: ['YEAR_Order_Date_'],
-    //   }
-    // })
-
-    // mainTreeTable.group({
-    //   by: function (obj) { return obj.YEAR_Order_Date_ + "-" + obj.Category },
-    //   map: {
-    //     value: ["Category"],
-    //     Category: ['Category'],
-    //     YEAR_Order_Date_: ["YEAR_Order_Date_"],
-    //   }
-    // }, 0)
-
-    // mainTreeTable.group({
-    //   by: 'YEAR_Order_Date_',
-    //   map: {
-    //     value: ["YEAR_Order_Date_"],
-    //     YEAR_Order_Date_: ["YEAR_Order_Date_"]
-    //   }
-    // }, 0)
-
     webix.ready(function () {
-      console.log('before ready')
       webix.ui({
         view: "scrollview",
         body: {
@@ -137,18 +108,7 @@ $(document).ready(function () {
           ]
         }
       });
-      console.log('after ready')
     });
-    // choosedWorksheet.addEventListener(tableau.TableauEventType.FilterChanged, async (filterEvent) => {
-    //   console.log('FilterChanged', filterEvent)
-    // })
-    // choosedWorksheet.addEventListener(tableau.TableauEventType.MarkSelectionChanged, async (filterEvent) => {
-    //   console.log('MarkSelectionChanged', filterEvent)
-    // })
-    // choosedWorksheet.addEventListener(tableau.TableauEventType.ParameterChanged, async (filterEvent) => {
-    //   console.log('ParameterChanged', filterEvent)
-    // })
-
   }, function (err) {
   });
 })
@@ -190,7 +150,7 @@ function summaryDataToTreetableFormat(summaryDataColumns, summaryDataData) {
     transformedRow['id'] = rowId
     rowId++
     for (var rowValue of row) {
-      transformedRow[nameToId(transformedData.columns[value_n].header.text)] = rowValue.nativeValue
+      transformedRow[nameToId(transformedData.columns[value_n].header.text)] = rowValue.formattedValue
       value_n++
     }
     transformedData.data.push(transformedRow)
@@ -208,7 +168,7 @@ function makeTreeTable(transformedData) {
     select: "cell",
     multiselect: true,
     scroll: 'xy',
-    // scrollY: true,
+    scrollY: true,
     resizeColumn: { headerOnly: true },
     resizeRow: { headerOnly: true }
   }
