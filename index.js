@@ -95,9 +95,11 @@ $(document).ready(function () {
         groupArgs.push(0)
       }
       branchN++
+      mainTreeTable.group(...groupArgs)
 
     }
     webix.ready(function () {
+      console.log('before ready')
       webix.ui({
         view: "scrollview",
         body: {
@@ -108,7 +110,9 @@ $(document).ready(function () {
           ]
         }
       });
+      console.log('after ready')
     });
+
   }, function (err) {
   });
 })
@@ -168,7 +172,7 @@ function makeTreeTable(transformedData) {
     select: "cell",
     multiselect: true,
     scroll: 'xy',
-    scrollY: true,
+    // scrollY: true,
     resizeColumn: { headerOnly: true },
     resizeRow: { headerOnly: true }
   }
