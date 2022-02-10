@@ -2,7 +2,6 @@ webix.DataStore.prototype.sorting.as.float = function (a, b) {
   return a > b ? 1 : -1;
 }
 
-
 Array.prototype.getUnique = function () {
   var o = {}, a = [], i, e;
   for (i = 0; e = this[i]; i++) { o[e] = 1 };
@@ -24,13 +23,10 @@ function columnsToList(columns) {
   return list
 }
 
-$(document).ready(function () {
-  tableau.extensions.initializeAsync().then(async function () {
-
-    var dashboard = tableau.extensions.dashboardContent.dashboard;
-    var dashboardWorksheets = dashboard.worksheets
+async function initWorksheet(choosedWorksheets) {
+  try {
     var allWsData = []
-    for (var ws of dashboardWorksheets) {
+    for (var ws of choosedWorksheets) {
       allWsData.push(await ws.getSummaryDataAsync())
     }
     allWsData.sort((a, b) => {
@@ -98,26 +94,20 @@ $(document).ready(function () {
       mainTreeTable.group(...groupArgs)
 
     }
-    webix.ready(function () {
-      console.log('before ready')
-      webix.ui({
-        view: "scrollview",
-        body: {
-          rows: [
-            webix.ui({
-              mainTreeTable
-            })
-          ]
-        }
-      });
-      console.log('after ready')
+
+    webix.ui({
+      id: 'app_view',
+      view: "scrollview",
+      body: {
+        rows: [
+          mainTreeTable
+        ]
+      }
     });
-
-  }, function (err) {
-  });
-})
-
-
+  } catch (e) {
+    console.log(e)
+  }
+}
 
 function nameToId(name) {
   var charsToReplace = [' ', '(', ')', '%', '-', '[', ']', '.', '?']
@@ -179,3 +169,69 @@ function makeTreeTable(transformedData) {
 
   return webix.ui(uiParams);
 }
+function popupConfigureModal() {
+  var dashboard = tableau.extensions.dashboardContent.dashboard;
+  var availableWorksheets = dashboard.worksheets
+  var configureModal = new bootstrap.Modal(document.getElementById('configureModal'))
+  var wsPickOverflow = document.getElementById('ws-pick-overflow')
+  wsPickOverflow.innerText = ''
+  for (var ws of availableWorksheets) {
+    var wsFormCheck = document.createElement('div')
+    wsFormCheck.classList.add('form-check')
+
+    var wsFormCheckInput = document.createElement('input')
+    wsFormCheckInput.classList.add('form-check-input')
+    wsFormCheckInput.classList.add('worksheet-check-input')
+    var wsFormCheckInputAttrs = {
+      type: 'checkbox',
+      value: '',
+      worksheet_id: nameToId(ws.name)
+    }
+    for (var [n, v] of Object.entries(wsFormCheckInputAttrs)) {
+      wsFormCheckInput.setAttribute(n, v)
+    }
+
+    var wsFormCheckLabel = document.createElement('label')
+    wsFormCheckLabel.classList.add('form-check-label')
+    wsFormCheckLabel.setAttribute('for', nameToId(ws.name))
+    wsFormCheckLabel.innerText = ws.name
+
+    wsFormCheck.appendChild(wsFormCheckInput)
+    wsFormCheck.appendChild(wsFormCheckLabel)
+    wsPickOverflow?.appendChild(wsFormCheck)
+
+    var saveButton = document.getElementById('save-settings-button')
+    saveButton.onclick = (e) => {
+      var checkedWorksheetIds = [...document.querySelectorAll('.worksheet-check-input:checked')].map(
+        wsInputNode => wsInputNode.getAttribute('worksheet_id')
+      )
+      tableau.extensions.settings.set('treetableChoosedWorksheet', JSON.stringify(checkedWorksheetIds))
+      tableau.extensions.settings.saveAsync()
+      initWorksheet(availableWorksheets.filter((ws) => {
+        return checkedWorksheetIds.includes(nameToId(ws.name))
+      }))
+      configureModal.hide()
+
+    }
+
+  }
+  configureModal.show()
+}
+
+$(document).ready(function () {
+  tableau.extensions.initializeAsync({ 'configure': popupConfigureModal }).then(async () => {
+    var choosedWorksheetsSettings = tableau.extensions.settings.get('treetableChoosedWorksheet')
+    console.log('choosedWorksheetsSettings', choosedWorksheetsSettings)
+    if (!choosedWorksheetsSettings) {
+      popupConfigureModal()
+    } else {
+      var dashboard = tableau.extensions.dashboardContent.dashboard;
+      var availableWorksheets = dashboard.worksheets
+      initWorksheet(availableWorksheets.filter((ws) => {
+        return JSON.parse(choosedWorksheetsSettings).includes(nameToId(ws.name))
+      }))
+    }
+  }, function (err) {
+    console.error(err)
+  });
+})

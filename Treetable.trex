@@ -4,7 +4,7 @@
     <default-locale>en_US</default-locale>
     <name resource-id="name"/>
     <description>Treetable</description>
-    <author name="dipertq" email="dipertq@gmail.com" organization="adventum" website="https://www.tableau.com"/>
+    <author name="tableau" email="dipertq@gmail.com" organization="adventum" website="https://www.tableau.com"/>
     <min-api-version>0.8</min-api-version>
     <source-location>
       <url>https://adventum.github.io/tableau_extension/</url>
@@ -13,10 +13,13 @@
     <permissions>
       <permission>full data</permission>
     </permissions>
+    <context-menu>
+      <configure-context-menu-item />
+    </context-menu>
   </dashboard-extension>
   <resources>
     <resource id="name">
-      <text locale="en_US">AdvTest Sample</text>
+      <text locale="en_US">Treetable</text>
     </resource>
   </resources>
 </manifest>

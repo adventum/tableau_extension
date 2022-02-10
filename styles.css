@@ -1,0 +1,28 @@
+
+
+#ws-pick-overflow {
+    max-height: 200px;
+    /* max-width: 300px; */
+    border: solid 1px rgba(0, 0, 0, 0.2);
+    border-radius: 2px;
+    padding: 5px;
+    overflow: auto;
+}
+
+#status {
+    margin-top: 6px;
+}
+
+#hierarchy-status,#dimensions-status {
+    padding: 0;
+    margin: 0;
+}
+
+h5 {
+    margin: 0;
+    padding: 0;
+}
+
+#dimensions-status-title {
+    margin-top: 8px;
+}
