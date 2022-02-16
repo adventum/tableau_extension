@@ -1,3 +1,7 @@
+var mainAppView = null
+var currTableId = ''
+var mainTreeTable = null
+
 webix.DataStore.prototype.sorting.as.float = function (a, b) {
   return a > b ? 1 : -1;
 }
@@ -28,6 +32,11 @@ async function initWorksheet(choosedWorksheets) {
     var allWsData = []
     for (var ws of choosedWorksheets) {
       allWsData.push(await ws.getSummaryDataAsync())
+      ws.addEventListener(tableau.TableauEventType.MarkSelectionChanged, e => {
+        console.log('tableau.TableauEventType.MarkSelectionChanged')
+        initWorksheet(choosedWorksheets)
+      });
+      ws.addEventListener(tableau.TableauEventType.FilterChanged, e => initWorksheet(choosedWorksheets));
     }
     allWsData.sort((a, b) => {
       if (a.columns.length < b.columns.length) return -1
@@ -41,7 +50,11 @@ async function initWorksheet(choosedWorksheets) {
     var groupCols = columnsToList(wsSummaryData.columns.slice(0, groupDeep))
 
     var transformedData = summaryDataToTreetableFormat(wsSummaryData.columns, wsSummaryData.data)
-    var mainTreeTable = makeTreeTable(transformedData)
+    var treeTableObj = makeTreeTable(transformedData)
+    if (mainTreeTable) {
+      document.querySelector('.webix_dtable').remove()
+    }
+    mainTreeTable = webix.ui(treeTableObj)
     var branchN = 0
     for (var additionalWsData of allWsData.slice(0, allWsData.length - 1).reverse()) {
       var thisWsGroupColumns = intersect(columnsToList(additionalWsData.columns), groupCols)
@@ -95,15 +108,6 @@ async function initWorksheet(choosedWorksheets) {
 
     }
 
-    webix.ui({
-      id: 'app_view',
-      view: "scrollview",
-      body: {
-        rows: [
-          mainTreeTable
-        ]
-      }
-    });
   } catch (e) {
     console.log(e)
   }
@@ -162,12 +166,11 @@ function makeTreeTable(transformedData) {
     select: "cell",
     multiselect: true,
     scroll: 'xy',
-    // scrollY: true,
     resizeColumn: { headerOnly: true },
     resizeRow: { headerOnly: true }
   }
 
-  return webix.ui(uiParams);
+  return uiParams;
 }
 function popupConfigureModal() {
   var dashboard = tableau.extensions.dashboardContent.dashboard;
@@ -175,6 +178,11 @@ function popupConfigureModal() {
   var configureModal = new bootstrap.Modal(document.getElementById('configureModal'))
   var wsPickOverflow = document.getElementById('ws-pick-overflow')
   wsPickOverflow.innerText = ''
+  var alreadyChoosedWs = []
+  if (tableau.extensions.settings.get('treetableChoosedWorksheet')) {
+    alreadyChoosedWs = JSON.parse(tableau.extensions.settings.get('treetableChoosedWorksheet'))
+    console.log('alreadyChoosedWs', alreadyChoosedWs)
+  }
   for (var ws of availableWorksheets) {
     var wsFormCheck = document.createElement('div')
     wsFormCheck.classList.add('form-check')
@@ -189,6 +197,9 @@ function popupConfigureModal() {
     }
     for (var [n, v] of Object.entries(wsFormCheckInputAttrs)) {
       wsFormCheckInput.setAttribute(n, v)
+    }
+    if (alreadyChoosedWs.includes(nameToId(ws.name))) {
+      wsFormCheckInput.checked = true
     }
 
     var wsFormCheckLabel = document.createElement('label')
