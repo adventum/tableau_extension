@@ -28,17 +28,17 @@ h5 {
 }
 
 .webix-table-image {
-    height: 100px;
-    width: 100%;
-    height: auto;
+    height: 700px;
+/*     width: 100%;
+    height: auto; */
     margin: 0px;
     padding: 0px;
 }
 
 .webix-table-image-container {
-    height: 100px;
-    width: 100%;
-    height: auto;
+    height: 700px;
+/*     width: 100%; */
+/*     height: auto; */
     margin: 0px;
     padding: 0px;
 }
