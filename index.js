@@ -2,6 +2,9 @@ var currTableId = ''
 var mainTreeTable = null
 var loadingModal = new bootstrap.Modal(document.getElementById('loadingModal'))
 var isEventListenersPassed = false
+var imageColumns = []
+var checkedColumnsFromWs = []
+
 
 webix.DataStore.prototype.sorting.as.float = function (a, b) {
   return a > b ? 1 : -1;
@@ -44,6 +47,7 @@ function auditWsCols(allWsData) {
     valueCols: columns that should be used for totals and subtotals
     groupDeep: count of groupCols
     wsSummaryData: summary data of bigest worksheet
+    allWsCols
   */
   allWsData.sort((a, b) => {
     if (a[1].columns.length < b[1].columns.length) return -1
@@ -122,14 +126,25 @@ async function initWorksheet(choosedWorksheets) {
           }
           return prop(finalObj)
         }]
+        if (imageColumns.includes(nameToId(valueField))) {
+          groupLevelObj.map[nameToId(valueField)] = [nameToId(valueField), function (prop, data) {
+            return ''
+          }]
+        }
       }
       var groupArgs = [groupLevelObj]
+      console.log(groupArgs)
       if (branchN > 0) {
         groupArgs.push(0)
       }
       branchN++
       mainTreeTable.group(...groupArgs)
     }
+    mainTreeTable.attachEvent("onAfterOpen", function () {
+      console.log('a')
+      mainTreeTable.adjustRowHeight()
+    });
+    mainTreeTable.adjustRowHeight()
   } catch (e) {
     console.log(e)
   }
@@ -150,7 +165,7 @@ function summaryDataToTreetableFormat(summaryDataColumns, summaryDataData) {
   var transformedData = {}
   transformedData.columns = []
   var col_n = 0
-  for (var col_field of summaryDataColumns) {
+  for (let col_field of summaryDataColumns) { // let is need for variable closure
     var columnData = {
       id: nameToId(col_field.fieldName),
       header: { text: col_field.fieldName },
@@ -159,6 +174,12 @@ function summaryDataToTreetableFormat(summaryDataColumns, summaryDataData) {
     }
     if (col_n === 0) {
       columnData.template = `{common.icon()} #${columnData.id}#`
+    }
+    if (imageColumns.includes(nameToId(col_field.fieldName))) {
+      columnData.template = (obj) => {
+        var fieldValue = obj[nameToId(col_field.fieldName)]
+        return fieldValue ? "<div class=\"webix-table-image-container\"><img src=\"" + fieldValue + "\" class=\"webix-table-image\"/></div>" : fieldValue
+      }
     }
     col_n++
     transformedData.columns.push(columnData)
@@ -190,11 +211,63 @@ function makeTreeTable(transformedData) {
     multiselect: true,
     scroll: 'xy',
     resizeColumn: { headerOnly: true },
-    resizeRow: { headerOnly: true }
+    resizeRow: true,
+    // autoheight: true,
+    // autowidth: true
   }
 
   return uiParams;
 }
+
+async function drawImageColumnsPopupSection() {
+  var checkedWorksheetIds = [...document.querySelectorAll('.worksheet-check-input:checked')].map(
+    wsInputNode => wsInputNode.getAttribute('worksheet_id')
+  )
+  var dashboard = tableau.extensions.dashboardContent.dashboard;
+  var availableWorksheets = dashboard.worksheets
+  var checkedWs = availableWorksheets.filter((ws) => {
+    return checkedWorksheetIds.includes(nameToId(ws.name))
+  })
+
+  var choosedWsCols = []
+  for (var ws of checkedWs) {
+    var wsSummaryData = await ws.getSummaryDataAsync()
+    var wsCols = wsColumnsToList(wsSummaryData.columns)
+    choosedWsCols = choosedWsCols.concat(wsCols)
+  }
+  var imageColumnsOverflow = document.getElementById('image-columns-pick-overflow')
+  imageColumnsOverflow.innerText = ''
+  for (var column of choosedWsCols.getUnique()) {
+    var columnFormCheck = document.createElement('div')
+    columnFormCheck.classList.add('form-check')
+
+    var columnFormCheckInput = document.createElement('input')
+    columnFormCheckInput.classList.add('form-check-input')
+    columnFormCheckInput.classList.add('image-column-check-input')
+    var wsFormCheckInputAttrs = {
+      type: 'checkbox',
+      value: '',
+      column_id: nameToId(column)
+    }
+    for (var [n, v] of Object.entries(wsFormCheckInputAttrs)) {
+      columnFormCheckInput.setAttribute(n, v)
+    }
+    if (imageColumns.includes(nameToId(column))) {
+      columnFormCheckInput.checked = true
+    }
+
+    var columnFormCheckLabel = document.createElement('label')
+    columnFormCheckLabel.classList.add('form-check-label')
+    columnFormCheckLabel.setAttribute('for', nameToId(column))
+
+    columnFormCheckLabel.innerText = column
+
+    columnFormCheck.appendChild(columnFormCheckInput)
+    columnFormCheck.appendChild(columnFormCheckLabel)
+    imageColumnsOverflow?.appendChild(columnFormCheck)
+  }
+}
+
 async function popupConfigureModal() {
   var dashboard = tableau.extensions.dashboardContent.dashboard;
   var availableWorksheets = dashboard.worksheets
@@ -207,9 +280,14 @@ async function popupConfigureModal() {
     console.log('alreadyChoosedWs', alreadyChoosedWs)
   }
   var availableWorksheetsSummaryData = await getWsSummaryData(availableWorksheets)
+  availableWorksheetsSummaryData.sort(function (a, b) {
+    if (a[1].columns.length < b[1].columns.length) { return -1; }
+    if (a[1].columns.length > b[1].columns.length) { return 1; }
+    return 0;
+  })
   console.log('availableWorksheetsSummaryData', availableWorksheetsSummaryData)
-  var summaryDataAudit = auditWsCols(availableWorksheetsSummaryData)
   for (var [ws, wsSummary] of availableWorksheetsSummaryData) {
+    var wsColumns = wsColumnsToList(wsSummary.columns)
     var wsFormCheck = document.createElement('div')
     wsFormCheck.classList.add('form-check')
 
@@ -227,40 +305,49 @@ async function popupConfigureModal() {
     if (alreadyChoosedWs.includes(nameToId(ws.name))) {
       wsFormCheckInput.checked = true
     }
+    wsFormCheckInput.onclick = async (e) => {
+      drawImageColumnsPopupSection()
+    }
 
     var wsFormCheckLabel = document.createElement('label')
     wsFormCheckLabel.classList.add('form-check-label')
     wsFormCheckLabel.setAttribute('for', nameToId(ws.name))
 
-    var thisWsGroupColumns = getArrayIntersectValues(wsColumnsToList(wsSummary.columns), summaryDataAudit.groupCols)
-
-    wsFormCheckLabel.innerText = ws.name + '  (' + thisWsGroupColumns.join(', ') + ')'
+    var columnsBages = wsColumns.map(name => `<span class="badge bg-secondary">${name}</span>`).join(' ')
+    wsFormCheckLabel.innerHTML = `${ws.name} ${columnsBages}`
 
     wsFormCheck.appendChild(wsFormCheckInput)
     wsFormCheck.appendChild(wsFormCheckLabel)
     wsPickOverflow?.appendChild(wsFormCheck)
 
-    var saveButton = document.getElementById('save-settings-button')
-    saveButton.onclick = (e) => {
-      var checkedWorksheetIds = [...document.querySelectorAll('.worksheet-check-input:checked')].map(
-        wsInputNode => wsInputNode.getAttribute('worksheet_id')
-      )
-      tableau.extensions.settings.set('treetableChoosedWorksheet', JSON.stringify(checkedWorksheetIds))
-      tableau.extensions.settings.saveAsync()
-      initWorksheet(availableWorksheets.filter((ws) => {
-        return checkedWorksheetIds.includes(nameToId(ws.name))
-      }))
-      configureModal.hide()
-    }
+  }
+  var saveButton = document.getElementById('save-settings-button')
+  saveButton.onclick = (e) => {
+    var checkedWorksheetIds = [...document.querySelectorAll('.worksheet-check-input:checked')].map(
+      wsInputNode => wsInputNode.getAttribute('worksheet_id')
+    )
+    var checkedImageColsIds = [...document.querySelectorAll('.image-column-check-input:checked')].map(
+      wsInputNode => wsInputNode.getAttribute('column_id')
+    )
+    tableau.extensions.settings.set('treetableChoosedWorksheet', JSON.stringify(checkedWorksheetIds))
+    tableau.extensions.settings.set('treetableChoosedImageColumns', JSON.stringify(checkedImageColsIds))
+    tableau.extensions.settings.saveAsync()
+
+    imageColumns = checkedImageColsIds
+    initWorksheet(availableWorksheets.filter((ws) => {
+      return checkedWorksheetIds.includes(nameToId(ws.name))
+    }))
+    configureModal.hide()
   }
   configureModal.show()
+  drawImageColumnsPopupSection()
 }
 
 
 $(document).ready(function () {
   tableau.extensions.initializeAsync({ 'configure': popupConfigureModal }).then(async () => {
     var choosedWorksheetsSettings = tableau.extensions.settings.get('treetableChoosedWorksheet')
-    console.log('choosedWorksheetsSettings', choosedWorksheetsSettings)
+    imageColumns = tableau.extensions.settings.get('treetableChoosedImageColumns') || []
     if (!choosedWorksheetsSettings) {
       await popupConfigureModal()
     } else {
@@ -269,11 +356,11 @@ $(document).ready(function () {
       var choosedWorksheets = availableWorksheets.filter((ws) => {
         return JSON.parse(choosedWorksheetsSettings).includes(nameToId(ws.name))
       })
-      initWorksheet(choosedWorksheets)
-      var dashboardParams = dashboard.getParametersAsync()
+      await initWorksheet(choosedWorksheets)
+      var dashboardParams = await dashboard.getParametersAsync()
       dashboardParams.map(param => {
-        param.addEventListener(tableau.TableauEventType.ParameterChanged, (e) => {
-          initWorksheet(choosedWorksheets)
+        param.addEventListener(tableau.TableauEventType.ParameterChanged, async (e) => {
+          await initWorksheet(choosedWorksheets)
         })
       })
     }
@@ -281,3 +368,4 @@ $(document).ready(function () {
     console.error(err)
   });
 })
+

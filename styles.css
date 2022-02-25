@@ -26,3 +26,23 @@ h5 {
 #dimensions-status-title {
     margin-top: 8px;
 }
+
+.webix-table-image {
+    height: 100px;
+    width: 100%;
+    height: auto;
+    margin: 0px;
+    padding: 0px;
+}
+
+.webix-table-image-container {
+    height: 100px;
+    width: 100%;
+    height: auto;
+    margin: 0px;
+    padding: 0px;
+}
+
+.modal-dialog {
+    max-width: 700px;
+}
