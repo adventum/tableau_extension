@@ -77,7 +77,7 @@ async function initWorksheet(choosedWorksheets) {
     }
     var allWsAuditDetails = auditWsCols(allWsData)
 
-    var transformedData = summaryDataToTreetableFormat(allWsAuditDetails.wsSummaryData.columns, allWsAuditDetails.wsSummaryData.data)
+    var transformedData = summaryDataToTreetableFormat(allWsAuditDetails.wsSummaryData.columns, allWsAuditDetails.wsSummaryData.data, allWsAuditDetails)
     var treeTableObj = makeTreeTable(transformedData)
     if (mainTreeTable) {
       document.querySelector('.webix_dtable').remove()
@@ -124,6 +124,9 @@ async function initWorksheet(choosedWorksheets) {
             finalObj[nameToId(valueCol)] = thisGroupTotals[i].formattedValue
             i++
           }
+          if (prop === undefined) {
+            return ''
+          }
           return prop(finalObj)
         }]
         if (imageColumns.includes(nameToId(valueField))) {
@@ -161,23 +164,41 @@ function nameToId(name) {
 }
 
 
-function summaryDataToTreetableFormat(summaryDataColumns, summaryDataData) {
+function summaryDataToTreetableFormat(summaryDataColumns, summaryDataData, wsDataAudit) {
   var transformedData = {}
   transformedData.columns = []
   var col_n = 0
-  for (let col_field of summaryDataColumns) { // let is need for variable closure
+  var groupColumnData = {
+    id: 'group',
+    header: { text: "Group" },
+    fillspace: true,
+    sort: 'string',
+    template: (obj, common) => {
+      return common.treetable(obj, common) + obj[nameToId(wsDataAudit.groupCols[obj.$level - 1])]
+    }
+  }
+  transformedData.columns.push(groupColumnData)
+  for (let col_field of wsDataAudit.valueCols) { // let is need for variable closure
+    var rawColumn = summaryDataColumns.filter(c => nameToId(c.fieldName) === nameToId(col_field))[0]
+    console.log('rawColumn', rawColumn)
     var columnData = {
-      id: nameToId(col_field.fieldName),
-      header: { text: col_field.fieldName },
+      id: nameToId(col_field),
+      header: { text: col_field },
       fillspace: true,
-      sort: col_field.dataType
+      sort: rawColumn.dataType,
+      template: (obj, common) => {
+        if (obj[nameToId(col_field)] === 'Null') {
+          return '-'
+        }
+        return obj[nameToId(col_field)]
+      }
     }
-    if (col_n === 0) {
-      columnData.template = `{common.icon()} #${columnData.id}#`
-    }
-    if (imageColumns.includes(nameToId(col_field.fieldName))) {
-      columnData.template = (obj) => {
-        var fieldValue = obj[nameToId(col_field.fieldName)]
+    if (imageColumns.includes(nameToId(col_field))) {
+      columnData.template = (obj, common) => {
+        var fieldValue = obj[nameToId(col_field)]
+        if (['undefined', undefined].includes(fieldValue)) {
+          return '-'
+        }
         return fieldValue ? "<div class=\"webix-table-image-container\"><img src=\"" + fieldValue + "\" class=\"webix-table-image\"/></div>" : fieldValue
       }
     }
@@ -192,7 +213,7 @@ function summaryDataToTreetableFormat(summaryDataColumns, summaryDataData) {
     transformedRow['id'] = rowId
     rowId++
     for (var rowValue of row) {
-      transformedRow[nameToId(transformedData.columns[value_n].header.text)] = rowValue.formattedValue
+      transformedRow[nameToId(summaryDataColumns[value_n].fieldName)] = rowValue.formattedValue
       value_n++
     }
     transformedData.data.push(transformedRow)
