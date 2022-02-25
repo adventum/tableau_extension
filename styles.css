@@ -28,7 +28,7 @@ h5 {
 }
 
 .webix-table-image {
-    height: 700px;
+    height: 100px;
 /*     width: 100%;
     height: auto; */
     margin: 0px;
@@ -36,7 +36,7 @@ h5 {
 }
 
 .webix-table-image-container {
-    height: 700px;
+    height: 100px;
 /*     width: 100%; */
 /*     height: auto; */
     margin: 0px;
